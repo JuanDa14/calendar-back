@@ -1,7 +1,7 @@
 
 # Backend de CalendarApp
 
-Cuenta con registro, autenticacion de usuarios y recuperacion de contraseña. Creacion de 3 modelos relacionados entre si para el manejo de sus datos.
+Cuenta con registro, autenticacion de usuarios y recuperacion de contraseña. Creacion de 3 modelos relacionados entre si para el manejo de sus datos. Manejo de roles, permisos, entre otras funcionalidades
 
 `LINK DEL Frontend : https://github.com/JuanDa14/calendar-front`
 
