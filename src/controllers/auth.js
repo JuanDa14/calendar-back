@@ -27,7 +27,7 @@ export const crearUsuario = async (req = request, res = response) => {
 
 		return res.status(200).json({
 			ok: true,
-			message: 'Revise su correo electrónico o Spam y ¡Confirme su correo electronico!',
+			message: 'Confirme su correo electronico!',
 		});
 	} catch (error) {
 		res.status(500).json({
@@ -143,7 +143,7 @@ export const olvidoContraña = async (req, res) => {
 			.status(200)
 			.json({
 				ok: true,
-				message: 'Revise su correo electrónico o Spam y restablezca su contraseña',
+				message: 'Revise su correo electrónico!',
 			});
 	} catch (error) {
 		return res.status(500).json({ ok: false, message: 'Por favor hable con el administrador' });
