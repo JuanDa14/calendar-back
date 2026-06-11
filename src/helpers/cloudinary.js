@@ -1,6 +1,7 @@
 import { cloudinary, isCloudinaryConfigured } from '../config/cloudinary.js';
 
-const AVATAR_FOLDER = 'calendar-app/avatars';
+export const CLOUDINARY_APP_FOLDER = 'calendarApp';
+export const CLOUDINARY_AVATARS_FOLDER = `${CLOUDINARY_APP_FOLDER}/avatars`;
 
 export const uploadAvatarImage = (buffer, userId) => {
 	if (!isCloudinaryConfigured()) {
@@ -10,11 +11,16 @@ export const uploadAvatarImage = (buffer, userId) => {
 	return new Promise((resolve, reject) => {
 		const uploadStream = cloudinary.uploader.upload_stream(
 			{
-				folder: AVATAR_FOLDER,
+				folder: CLOUDINARY_AVATARS_FOLDER,
 				public_id: `user_${userId}`,
 				overwrite: true,
 				invalidate: true,
 				resource_type: 'image',
+				tags: [CLOUDINARY_APP_FOLDER, 'avatar', 'profile'],
+				context: {
+					app: 'calendarApp',
+					type: 'profile-avatar',
+				},
 				transformation: [
 					{ width: 400, height: 400, crop: 'fill', gravity: 'auto' },
 					{ quality: 'auto', fetch_format: 'auto' },

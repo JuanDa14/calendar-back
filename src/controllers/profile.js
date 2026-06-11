@@ -91,9 +91,10 @@ export const uploadProfileAvatar = async (req = request, res = response) => {
 			await deleteCloudinaryImage(previousPublicId);
 		}
 
-		usuario.avatar = result.secure_url;
-		usuario.avatarPublicId = result.public_id;
-		await usuario.save();
+		await Usuario.findByIdAndUpdate(req.uid, {
+			avatar: result.secure_url,
+			avatarPublicId: result.public_id,
+		});
 
 		const updatedUser = await findProfileUser(req.uid);
 
@@ -130,9 +131,10 @@ export const deleteProfileAvatar = async (req = request, res = response) => {
 			await deleteCloudinaryImage(usuario.avatarPublicId);
 		}
 
-		usuario.avatar = '';
-		usuario.avatarPublicId = '';
-		await usuario.save();
+		await Usuario.findByIdAndUpdate(req.uid, {
+			avatar: '',
+			avatarPublicId: '',
+		});
 
 		const updatedUser = await findProfileUser(req.uid);
 

@@ -92,15 +92,11 @@ usuarioSchema.method('toJSON', function () {
 	return object;
 });
 
-usuarioSchema.pre('save', function (next) {
-	const user = this;
-
-	if (!user.isModified('password')) return next();
+usuarioSchema.pre('save', function () {
+	if (!this.isModified('password')) return;
 
 	const salt = bcrypt.genSaltSync();
-	user.password = bcrypt.hashSync(user.password, salt);
-
-	next();
+	this.password = bcrypt.hashSync(this.password, salt);
 });
 
 usuarioSchema.methods.comparePassword = function (password) {

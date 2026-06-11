@@ -11,26 +11,27 @@ const fileFilter = (_req, file, cb) => {
 	}
 };
 
-export const uploadAvatar = multer({
+const multerUpload = multer({
 	storage,
 	fileFilter,
 	limits: { fileSize: 5 * 1024 * 1024 },
 }).single('avatar');
 
-export const handleUploadError = (err, _req, res, next) => {
-	if (!err) return next();
+const formatUploadError = (err) => {
+	if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+		return 'La imagen no puede superar los 5 MB';
+	}
+	return err.message || 'Error al subir la imagen';
+};
 
-	if (err instanceof multer.MulterError) {
-		if (err.code === 'LIMIT_FILE_SIZE') {
+export const uploadAvatar = (req, res, next) => {
+	multerUpload(req, res, (err) => {
+		if (err) {
 			return res.status(400).json({
 				ok: false,
-				message: 'La imagen no puede superar los 5 MB',
+				message: formatUploadError(err),
 			});
 		}
-	}
-
-	return res.status(400).json({
-		ok: false,
-		message: err.message || 'Error al subir la imagen',
+		next();
 	});
 };

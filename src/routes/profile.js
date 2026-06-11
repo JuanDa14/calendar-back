@@ -7,7 +7,7 @@ import {
 	updateProfile,
 	uploadProfileAvatar,
 } from '../controllers/profile.js';
-import { handleUploadError, uploadAvatar, validarCampos, verifyToken } from '../middlewares/index.js';
+import { uploadAvatar, validarCampos, verifyToken } from '../middlewares/index.js';
 
 const router = Router();
 
@@ -27,7 +27,7 @@ router.patch(
 	updateProfile
 );
 
-router.post('/avatar', uploadAvatar, handleUploadError, uploadProfileAvatar);
+router.post('/avatar', uploadAvatar, uploadProfileAvatar);
 router.delete('/avatar', deleteProfileAvatar);
 
 export default router;
