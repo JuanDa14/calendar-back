@@ -47,6 +47,39 @@ const usuarioSchema = new Schema(
 			type: Schema.Types.ObjectId,
 			ref: 'Team',
 		},
+
+		avatar: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+
+		avatarPublicId: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+
+		bio: {
+			type: String,
+			default: '',
+			trim: true,
+			maxlength: 280,
+		},
+
+		phone: {
+			type: String,
+			default: '',
+			trim: true,
+			maxlength: 20,
+		},
+
+		jobTitle: {
+			type: String,
+			default: '',
+			trim: true,
+			maxlength: 80,
+		},
 	},
 	{
 		timestamps: true,

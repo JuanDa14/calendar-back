@@ -24,7 +24,7 @@ export const getEventsTeam = async (req = request, res = response) => {
 			$or: [{ owner: uid }, { members: uid }],
 		})
 			.populate('owner', 'name')
-			.populate('members', 'name email')
+			.populate('members', 'name email avatar')
 			.populate('events', 'title end start notes user')
 			.select('name description')
 			.lean();
@@ -137,7 +137,7 @@ export const createTeam = async (req = request, res = response) => {
 		}
 
 		const populatedMembers = await Usuario.find({ _id: { $in: memberIds } })
-			.select('name email')
+			.select('name email avatar')
 			.lean();
 
 		const teamFormated = {

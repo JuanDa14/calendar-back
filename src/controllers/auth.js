@@ -42,7 +42,7 @@ export const loginUsuario = async (req, res = response) => {
 
 	try {
 		const usuario = await Usuario.findOne({ email })
-			.select('name team verified')
+			.select('name email avatar bio phone jobTitle team verified')
 			.populate('team', 'name');
 
 		const { accessToken, refreshToken } = await generarJWT(usuario._id, usuario.name);
@@ -68,7 +68,7 @@ export const revalidarToken = async (req, res = response) => {
 
 	try {
 		const userInDB = await Usuario.findById(uid)
-			.select('name team verified')
+			.select('name email avatar bio phone jobTitle team verified')
 			.populate('team', 'name')
 			.lean();
 

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 
-import { auth, events, team } from './routes/index.js';
+import { auth, events, profile, team } from './routes/index.js';
 import { dbConnection } from './database/index.js';
 import { notFoundHandler, errorHandler } from './middlewares/error-handler.js';
 import { generalLimiter, authLimiter } from './middlewares/rate-limiter.js';
@@ -45,6 +45,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/user', authLimiter, auth);
+app.use('/api/user/profile', profile);
 app.use('/api/events', events);
 app.use('/api/team', team);
 
