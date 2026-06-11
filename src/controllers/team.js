@@ -29,13 +29,6 @@ export const getEventsTeam = async (req = request, res = response) => {
 			events: eventosFormated,
 		};
 
-		if (eventosFormated.length === 0) {
-			return res.status(200).json({
-				ok: false,
-				message: 'No hay eventos en este equipo',
-			});
-		}
-
 		res.status(200).json({
 			ok: true,
 			eventos: teamFormated,
@@ -203,6 +196,44 @@ export const searchMember = async (req = request, res = response) => {
 		res.status(200).json({
 			ok: true,
 			usuario,
+		});
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const updateTeam = async (req = request, res = response) => {
+	const { id } = req.params;
+	const { name, description } = req.body;
+
+	try {
+		const duplicate = await Team.findOne({ name, _id: { $ne: id } }).select('_id').lean();
+
+		if (duplicate) {
+			return res.status(400).json({
+				ok: false,
+				message: `El equipo con el nombre ${name} ya existe`,
+			});
+		}
+
+		const team = await Team.findByIdAndUpdate(
+			id,
+			{ name, description },
+			{ new: true, runValidators: true }
+		)
+			.select('name description')
+			.lean();
+
+		res.status(200).json({
+			ok: true,
+			team: {
+				id: team._id,
+				name: team.name,
+				description: team.description,
+			},
 		});
 	} catch (error) {
 		res.status(500).json({

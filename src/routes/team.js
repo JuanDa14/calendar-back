@@ -8,6 +8,7 @@ import {
 	deleteTeam,
 	getEventsTeam,
 	searchMember,
+	updateTeam,
 } from '../controllers/index.js';
 
 import {
@@ -69,6 +70,19 @@ router.post(
 		validarCampos,
 	],
 	deleteMember
+);
+
+router.put(
+	'/:id',
+	[
+		check('id').notEmpty().isMongoId(),
+		check('id').custom(ExisteElTeamPorIdEnDb),
+		check('id').custom(EsCreadorDelTeam),
+		check('name', 'El nombre del equipo es obligatorio').notEmpty().isString().trim(),
+		check('description', 'La descripción debe ser texto').optional().isString().trim(),
+		validarCampos,
+	],
+	updateTeam
 );
 
 router.delete(
