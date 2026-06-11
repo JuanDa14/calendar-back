@@ -23,11 +23,17 @@ export const crearUsuario = async (req = request, res = response) => {
 
 		const verifiedURL = verifiedLink(token);
 
-		await sendEmail('validate-email', name, verifiedURL, email, 'Verifica tu cuenta');
+		await sendEmail(
+			'validate-email',
+			name,
+			verifiedURL,
+			email,
+			'Verifica tu cuenta en CalendarApp'
+		);
 
 		return res.status(200).json({
 			ok: true,
-			message: 'Confirme su correo electronico!',
+			message: 'Revisa tu correo para verificar tu cuenta.',
 		});
 	} catch (error) {
 		res.status(500).json({
@@ -136,15 +142,13 @@ export const olvidoContraña = async (req, res) => {
 			user.name,
 			forgotURL,
 			user.email,
-			'Restablecer contraseña'
+			'Restablece tu contraseña · CalendarApp'
 		);
 
-		return res
-			.status(200)
-			.json({
-				ok: true,
-				message: 'Revise su correo electrónico!',
-			});
+		return res.status(200).json({
+			ok: true,
+			message: 'Revisa tu correo para restablecer tu contraseña.',
+		});
 	} catch (error) {
 		return res.status(500).json({ ok: false, message: 'Por favor hable con el administrador' });
 	}
