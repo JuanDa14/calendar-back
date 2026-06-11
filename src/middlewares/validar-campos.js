@@ -8,7 +8,7 @@ export const validarCampos = (req, res = response, next) => {
 
 	const errorMap = errorArray.map((error) => ({
 		message: error.msg,
-		path: error.param,
+		path: error.path || error.param,
 		value: error.value,
 	}));
 

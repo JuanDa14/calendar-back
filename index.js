@@ -1,26 +1,22 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
+import app from './src/app.js';
 import { dbConnection } from './src/database/index.js';
-import { auth, events, team } from './src/routes/index.js';
+
 dotenv.config();
 
-const options = {
-	origin: process.env.FRONTEND_URL,
+const PORT = process.env.PORT || 4000;
+
+const startServer = async () => {
+	try {
+		await dbConnection();
+
+		app.listen(PORT, () => {
+			console.log(`Servidor corriendo en el puerto ${PORT}`);
+		});
+	} catch (error) {
+		console.error('Error al iniciar el servidor:', error.message);
+		process.exit(1);
+	}
 };
 
-const app = express();
-
-dbConnection();
-
-app.use(cors(options));
-
-app.use(express.json());
-
-app.use('/api/user', auth);
-app.use('/api/events', events);
-app.use('/api/team', team);
-
-app.listen(process.env.PORT, () => {
-	console.log(`Servidor corriendo en el puerto ${process.env.PORT}`);
-});
+startServer();
