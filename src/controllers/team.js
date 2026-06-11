@@ -1,7 +1,8 @@
 import { request, response } from 'express';
 import mongoose from 'mongoose';
-import { formatMember } from '../helpers/index.js';
-import { Evento, Team, Usuario } from '../models/index.js';
+import { addUserToTeam, formatJoinRequest, formatMember } from '../helpers/index.js';
+import { Evento, Team, TeamJoinRequest, Usuario } from '../models/index.js';
+import { emitToUser } from '../socket/emitter.js';
 
 const getErrorMessage = (error) => {
 	if (error?.code === 11000) {
@@ -308,6 +309,15 @@ export const searchTeams = async (req = request, res = response) => {
 			.limit(8)
 			.lean();
 
+		const pendingRequest = await TeamJoinRequest.findOne({
+			user: req.uid,
+			status: 'pending',
+		})
+			.select('team')
+			.lean();
+
+		const pendingTeamId = pendingRequest?.team?.toString();
+
 		res.status(200).json({
 			ok: true,
 			equipos: equipos.map((equipo) => ({
@@ -316,6 +326,7 @@ export const searchTeams = async (req = request, res = response) => {
 				description: equipo.description || '',
 				membersCount: equipo.members?.length || 0,
 				owner: equipo.owner?.name || '—',
+				hasPendingRequest: pendingTeamId === equipo._id.toString(),
 			})),
 		});
 	} catch (error) {
@@ -327,7 +338,7 @@ export const searchTeams = async (req = request, res = response) => {
 	}
 };
 
-export const joinTeam = async (req = request, res = response) => {
+export const requestJoinTeam = async (req = request, res = response) => {
 	const { uid } = req;
 	const { id } = req.params;
 
@@ -354,7 +365,7 @@ export const joinTeam = async (req = request, res = response) => {
 			});
 		}
 
-		const team = await Team.findById(id).select('name description members owner events');
+		const team = await Team.findById(id).select('name owner members');
 
 		if (!team) {
 			return res.status(404).json({ ok: false, message: 'Equipo no encontrado' });
@@ -374,41 +385,270 @@ export const joinTeam = async (req = request, res = response) => {
 			});
 		}
 
-		const userEvents = await Evento.find({ user: uid }).select('_id').lean();
+		const existingPending = await TeamJoinRequest.findOne({
+			user: uid,
+			status: 'pending',
+		}).lean();
 
-		team.members.push(uid);
-
-		for (const event of userEvents) {
-			const exists = team.events.some((eventId) => eventId.toString() === event._id.toString());
-			if (!exists) team.events.push(event._id);
+		if (existingPending) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya tienes una solicitud de unión pendiente',
+			});
 		}
 
-		await team.save();
-		await Usuario.findByIdAndUpdate(uid, { team: team._id });
+		const duplicateRequest = await TeamJoinRequest.findOne({
+			team: id,
+			user: uid,
+			status: 'pending',
+		}).lean();
 
-		const owner = await Usuario.findById(team.owner).select('name').lean();
-		const populatedMembers = await Usuario.find({ _id: { $in: team.members } })
-			.select('name email avatar')
+		if (duplicateRequest) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya enviaste una solicitud a este equipo',
+			});
+		}
+
+		const joinRequest = await TeamJoinRequest.create({
+			team: id,
+			user: uid,
+			status: 'pending',
+		});
+
+		const populated = await TeamJoinRequest.findById(joinRequest._id)
+			.populate('team', 'name')
+			.populate('user', 'name email avatar')
+			.lean();
+
+		const formatted = formatJoinRequest(populated);
+
+		emitToUser(team.owner.toString(), 'join-request:created', formatted);
+
+		res.status(201).json({
+			ok: true,
+			message: `Solicitud enviada al equipo ${team.name}. El propietario debe aprobarla.`,
+			request: formatted,
+		});
+	} catch (error) {
+		console.error('requestJoinTeam error:', error);
+		res.status(500).json({
+			ok: false,
+			message: getErrorMessage(error),
+		});
+	}
+};
+
+export const getJoinRequests = async (req = request, res = response) => {
+	const { uid } = req;
+
+	try {
+		const team = await Team.findOne({ owner: uid }).select('_id name').lean();
+
+		if (!team) {
+			return res.status(403).json({
+				ok: false,
+				message: 'Solo el propietario puede ver las solicitudes',
+			});
+		}
+
+		const requests = await TeamJoinRequest.find({ team: team._id, status: 'pending' })
+			.populate('user', 'name email avatar')
+			.populate('team', 'name')
+			.sort({ createdAt: -1 })
 			.lean();
 
 		res.status(200).json({
 			ok: true,
-			message: `Te uniste al equipo ${team.name}`,
-			team: {
-				id: team._id,
-				name: team.name,
-				description: team.description || '',
-				owner: { _id: team.owner, name: owner?.name },
-				members: populatedMembers.map((member) => ({
-					_id: member._id,
-					name: member.name,
-					email: member.email,
-					avatar: member.avatar || null,
-				})),
-			},
+			requests: requests.map(formatJoinRequest),
 		});
 	} catch (error) {
-		console.error('joinTeam error:', error);
+		console.error('getJoinRequests error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const getMyJoinRequest = async (req = request, res = response) => {
+	const { uid } = req;
+
+	try {
+		const requestDoc = await TeamJoinRequest.findOne({ user: uid, status: 'pending' })
+			.populate('team', 'name description')
+			.populate('user', 'name email avatar')
+			.lean();
+
+		res.status(200).json({
+			ok: true,
+			request: requestDoc ? formatJoinRequest(requestDoc) : null,
+		});
+	} catch (error) {
+		console.error('getMyJoinRequest error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const approveJoinRequest = async (req = request, res = response) => {
+	const { uid } = req;
+	const { requestId } = req.params;
+
+	try {
+		const joinRequest = await TeamJoinRequest.findById(requestId)
+			.populate('team', 'name owner')
+			.populate('user', 'name email avatar')
+			.lean();
+
+		if (!joinRequest || joinRequest.status !== 'pending') {
+			return res.status(404).json({
+				ok: false,
+				message: 'Solicitud no encontrada o ya fue procesada',
+			});
+		}
+
+		if (joinRequest.team.owner.toString() !== uid.toString()) {
+			return res.status(403).json({
+				ok: false,
+				message: 'Solo el propietario puede aprobar solicitudes',
+			});
+		}
+
+		const applicantId = joinRequest.user._id.toString();
+		const applicant = await Usuario.findById(applicantId).select('team').lean();
+
+		if (applicant?.team) {
+			await TeamJoinRequest.findByIdAndUpdate(requestId, { status: 'rejected' });
+			return res.status(400).json({
+				ok: false,
+				message: 'El usuario ya pertenece a otro equipo',
+			});
+		}
+
+		const teamData = await addUserToTeam(joinRequest.team._id, applicantId);
+
+		await TeamJoinRequest.findByIdAndUpdate(requestId, { status: 'approved' });
+		await TeamJoinRequest.updateMany(
+			{ user: applicantId, status: 'pending', _id: { $ne: requestId } },
+			{ status: 'rejected' }
+		);
+
+		emitToUser(applicantId, 'join-request:approved', {
+			requestId,
+			team: teamData,
+			message: `Tu solicitud al equipo ${teamData.name} fue aprobada`,
+		});
+
+		emitToUser(uid, 'join-request:removed', { requestId });
+
+		res.status(200).json({
+			ok: true,
+			message: `${joinRequest.user.name} se unió al equipo`,
+			member: {
+				_id: joinRequest.user._id,
+				name: joinRequest.user.name,
+				email: joinRequest.user.email,
+				avatar: joinRequest.user.avatar || null,
+			},
+			team: teamData,
+		});
+	} catch (error) {
+		console.error('approveJoinRequest error:', error);
+		res.status(500).json({
+			ok: false,
+			message: error.message || 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const rejectJoinRequest = async (req = request, res = response) => {
+	const { uid } = req;
+	const { requestId } = req.params;
+
+	try {
+		const joinRequest = await TeamJoinRequest.findById(requestId)
+			.populate('team', 'name owner')
+			.populate('user', 'name')
+			.lean();
+
+		if (!joinRequest || joinRequest.status !== 'pending') {
+			return res.status(404).json({
+				ok: false,
+				message: 'Solicitud no encontrada o ya fue procesada',
+			});
+		}
+
+		if (joinRequest.team.owner.toString() !== uid.toString()) {
+			return res.status(403).json({
+				ok: false,
+				message: 'Solo el propietario puede rechazar solicitudes',
+			});
+		}
+
+		await TeamJoinRequest.findByIdAndUpdate(requestId, { status: 'rejected' });
+
+		const applicantId = joinRequest.user._id.toString();
+
+		emitToUser(applicantId, 'join-request:rejected', {
+			requestId,
+			teamName: joinRequest.team.name,
+			message: `Tu solicitud al equipo ${joinRequest.team.name} fue rechazada`,
+		});
+
+		emitToUser(uid, 'join-request:removed', { requestId });
+
+		res.status(200).json({
+			ok: true,
+			message: `Solicitud de ${joinRequest.user.name} rechazada`,
+		});
+	} catch (error) {
+		console.error('rejectJoinRequest error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const cancelJoinRequest = async (req = request, res = response) => {
+	const { uid } = req;
+	const { requestId } = req.params;
+
+	try {
+		const joinRequest = await TeamJoinRequest.findById(requestId)
+			.populate('team', 'name owner')
+			.lean();
+
+		if (!joinRequest || joinRequest.status !== 'pending') {
+			return res.status(404).json({
+				ok: false,
+				message: 'Solicitud no encontrada o ya fue procesada',
+			});
+		}
+
+		if (joinRequest.user.toString() !== uid.toString()) {
+			return res.status(403).json({
+				ok: false,
+				message: 'Solo puedes cancelar tu propia solicitud',
+			});
+		}
+
+		await TeamJoinRequest.findByIdAndUpdate(requestId, { status: 'rejected' });
+
+		emitToUser(joinRequest.team.owner.toString(), 'join-request:cancelled', {
+			requestId,
+			teamName: joinRequest.team.name,
+		});
+
+		res.status(200).json({
+			ok: true,
+			message: 'Solicitud cancelada',
+		});
+	} catch (error) {
+		console.error('cancelJoinRequest error:', error);
 		res.status(500).json({
 			ok: false,
 			message: 'Por favor hable con el administrador',

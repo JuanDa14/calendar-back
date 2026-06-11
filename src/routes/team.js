@@ -1,14 +1,19 @@
 import { Router } from 'express';
-import { check } from 'express-validator';
+import { check, param } from 'express-validator';
 
 import {
 	addMember,
+	approveJoinRequest,
+	cancelJoinRequest,
 	createTeam,
 	deleteMember,
 	deleteTeam,
 	getEventsTeam,
-	joinTeam,
+	getJoinRequests,
+	getMyJoinRequest,
 	leaveTeam,
+	rejectJoinRequest,
+	requestJoinTeam,
 	searchMember,
 	searchTeams,
 	updateTeam,
@@ -56,7 +61,33 @@ router.post(
 	searchTeams
 );
 
-router.post('/join/:id', [check('id').notEmpty().isMongoId(), validarCampos], joinTeam);
+router.get('/join-requests', getJoinRequests);
+
+router.get('/my-join-request', getMyJoinRequest);
+
+router.post(
+	'/request-join/:id',
+	[param('id').notEmpty().isMongoId(), validarCampos],
+	requestJoinTeam
+);
+
+router.post(
+	'/join-requests/:requestId/approve',
+	[param('requestId').notEmpty().isMongoId(), validarCampos],
+	approveJoinRequest
+);
+
+router.post(
+	'/join-requests/:requestId/reject',
+	[param('requestId').notEmpty().isMongoId(), validarCampos],
+	rejectJoinRequest
+);
+
+router.delete(
+	'/join-requests/:requestId',
+	[param('requestId').notEmpty().isMongoId(), validarCampos],
+	cancelJoinRequest
+);
 
 router.post('/leave', leaveTeam);
 

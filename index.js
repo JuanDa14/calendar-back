@@ -1,6 +1,9 @@
+import http from 'http';
+
 import dotenv from 'dotenv';
 import app from './src/app.js';
 import { dbConnection } from './src/database/index.js';
+import { initSocket } from './src/socket/index.js';
 
 dotenv.config();
 
@@ -11,9 +14,13 @@ const startServer = async () => {
 		await dbConnection();
 
 		const PORT = process.env.PORT || 4000;
+		const httpServer = http.createServer(app);
 
-		app.listen(PORT, () => {
+		initSocket(httpServer);
+
+		httpServer.listen(PORT, () => {
 			console.log(`Servidor corriendo en el puerto ${PORT}`);
+			console.log('WebSocket activo (socket.io)');
 		});
 	} catch (error) {
 		console.error('Error al iniciar el servidor:', error.message);
