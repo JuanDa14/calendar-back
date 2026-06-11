@@ -53,8 +53,11 @@ router.post(
 router.post(
 	'/search/member',
 	[
-		check('email', 'El email es obligatorio').notEmpty().isEmail().normalizeEmail().trim(),
-		check('email').custom(NoExisteUsuarioPorEmailEnDB),
+		check('query', 'La búsqueda debe tener al menos 2 caracteres')
+			.notEmpty()
+			.isString()
+			.trim()
+			.isLength({ min: 2 }),
 		validarCampos,
 	],
 	searchMember

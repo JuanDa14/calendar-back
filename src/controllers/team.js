@@ -174,28 +174,32 @@ export const deleteMember = async (req = request, res = response) => {
 };
 
 export const searchMember = async (req = request, res = response) => {
-	const { email } = req.body;
+	const { query } = req.body;
 
 	try {
-		const usuario = await Usuario.findOne({ email }).select('name team email').lean();
+		const trimmed = query?.trim();
 
-		if (usuario._id.toString() === req.uid) {
-			return res.status(400).json({
-				ok: false,
-				message: 'No puede agregarse a si mismo',
+		if (!trimmed || trimmed.length < 2) {
+			return res.status(200).json({
+				ok: true,
+				usuarios: [],
 			});
 		}
 
-		if (usuario.team) {
-			return res.status(400).json({
-				ok: false,
-				message: 'El usuario buscado ya pertenece a un equipo',
-			});
-		}
+		const regex = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+		const usuarios = await Usuario.find({
+			_id: { $ne: req.uid },
+			team: null,
+			$or: [{ email: regex }, { name: regex }],
+		})
+			.select('name email')
+			.limit(8)
+			.lean();
 
 		res.status(200).json({
 			ok: true,
-			usuario,
+			usuarios,
 		});
 	} catch (error) {
 		res.status(500).json({
