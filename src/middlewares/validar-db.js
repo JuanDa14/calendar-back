@@ -10,22 +10,27 @@ export const NoExisteEventoEnDB = async (id) => {
 };
 
 export const ExisteEventoEnDB = async (title, { req }) => {
+	const eventId = req.params?.id?.toString();
+	const isSameEvent = (id) => eventId && id?.toString() === eventId;
+
 	const team = await Team.findOne({
 		$or: [{ owner: req.uid }, { members: req.uid }],
 	}).populate('events', 'title');
 
-	const existe = await Evento.findOne({ title }).select('title user').lean();
-
-	//TODO Comprobar que si es un team event no se pueda crear un evento con el mismo nombre
 	if (team) {
-		const existeTeam = team.events.find((event) => event.title === title);
+		const duplicateInTeam = team.events.find(
+			(event) => event.title === title && !isSameEvent(event._id)
+		);
 
-		if (existeTeam) {
+		if (duplicateInTeam) {
 			throw new Error(`El evento ${title} ya existe en el equipo`);
 		}
+		return;
 	}
-	//TODO Comprobar que si es un personal event no se pueda crear un evento con el mismo nombre
-	if (!team && existe && existe.user.toString() === req.uid.toString()) {
+
+	const existe = await Evento.findOne({ title, user: req.uid }).select('title user').lean();
+
+	if (existe && !isSameEvent(existe._id)) {
 		throw new Error(`El evento ${title} ya existe`);
 	}
 };
