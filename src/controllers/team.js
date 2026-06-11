@@ -163,7 +163,11 @@ export const createTeam = async (req = request, res = response) => {
 		console.error('createTeam error:', error);
 
 		if (createdTeamId) {
-			await Team.findByIdAndDelete(createdTeamId).catch(() => null);
+			await Promise.all([
+				Team.findByIdAndDelete(createdTeamId).catch(() => null),
+				Usuario.findByIdAndUpdate(uid, { team: null }).catch(() => null),
+				Usuario.updateMany({ team: createdTeamId }, { team: null }).catch(() => null),
+			]);
 		}
 
 		const status = error?.code === 11000 || error?.name === 'ValidationError' ? 400 : 500;
