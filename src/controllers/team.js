@@ -77,10 +77,26 @@ export const createTeam = async (req = request, res = response) => {
 			});
 		}
 
-		if (usuario.team) {
+		const ownedTeam = await Team.findOne({ owner: uid }).select('_id').lean();
+
+		if (ownedTeam) {
 			return res.status(400).json({
 				ok: false,
-				message: 'Ya perteneces a un equipo',
+				message: 'Ya eres propietario de un equipo. Elimínalo antes de crear otro.',
+			});
+		}
+
+		const memberTeam = await Team.findOne({ members: uid }).select('_id members events').lean();
+
+		if (memberTeam) {
+			const userEvents = await Evento.find({ user: uid }).select('_id').lean();
+			const userEventIds = userEvents.map((event) => event._id);
+
+			await Team.findByIdAndUpdate(memberTeam._id, {
+				$pull: {
+					members: uid,
+					events: { $in: userEventIds },
+				},
 			});
 		}
 

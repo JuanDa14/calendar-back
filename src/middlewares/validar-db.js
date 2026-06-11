@@ -93,6 +93,14 @@ export const UsuarioTieneUnTeam = async (__, { req }) => {
 	}
 };
 
+export const UsuarioEsOwnerDeUnTeam = async (__, { req }) => {
+	const ownedTeam = await Team.findOne({ owner: req.uid }).select('_id').lean();
+
+	if (ownedTeam) {
+		throw new Error('Ya eres propietario de un equipo. Elimínalo antes de crear otro.');
+	}
+};
+
 //?Team
 
 export const ExisteElTeamPorNombreEnDb = async (name) => {

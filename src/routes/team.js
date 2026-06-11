@@ -16,7 +16,7 @@ import {
 	ExisteElTeamPorIdEnDb,
 	ExisteElTeamPorNombreEnDb,
 	NoExisteUsuarioPorEmailEnDB,
-	UsuarioTieneUnTeam,
+	UsuarioEsOwnerDeUnTeam,
 	validarCampos,
 	verifyToken,
 } from '../middlewares/index.js';
@@ -45,7 +45,7 @@ router.post(
 	[
 		check('name', 'El nombre del equipo es obligatorio').notEmpty().isString().trim(),
 		check('name').custom(ExisteElTeamPorNombreEnDb),
-		check('name').custom(UsuarioTieneUnTeam),
+		check('name').custom(UsuarioEsOwnerDeUnTeam),
 		validarCampos,
 	],
 	createTeam
