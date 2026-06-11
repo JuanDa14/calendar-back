@@ -43,33 +43,47 @@ export const getEventsTeam = async (req = request, res = response) => {
 
 export const createTeam = async (req = request, res = response) => {
 	const { uid } = req;
-	const { members, name, description } = req.body;
+	const { members = [], name, description } = req.body;
 
 	try {
 		const usuario = await Usuario.findById(uid);
 
-		await Evento.deleteMany({ user: uid });
+		if (!usuario) {
+			return res.status(404).json({
+				ok: false,
+				message: 'Usuario no encontrado',
+			});
+		}
 
-		const NewMembers = members.map((member) => member._id);
+		const memberIds = members
+			.map((member) => member._id || member.id)
+			.filter(Boolean);
+
+		const userEvents = await Evento.find({ user: uid }).select('_id').lean();
+		const eventIds = userEvents.map((event) => event._id);
 
 		const team = await Team.create({
 			owner: uid,
 			name,
 			description,
-			members: NewMembers,
+			members: memberIds,
+			events: eventIds,
 		});
 
 		usuario.team = team._id;
-
 		await usuario.save();
 
-		if (members.length > 0) {
-			members.map(async ({ _id }) => {
-				const usuario = await Usuario.findById(_id);
-				usuario.team = team._id;
-				await usuario.save();
-			});
+		if (memberIds.length > 0) {
+			await Promise.all(
+				memberIds.map((memberId) =>
+					Usuario.findByIdAndUpdate(memberId, { team: team._id })
+				)
+			);
 		}
+
+		const populatedMembers = await Usuario.find({ _id: { $in: memberIds } })
+			.select('name email')
+			.lean();
 
 		const owner = {
 			_id: usuario._id,
@@ -77,7 +91,11 @@ export const createTeam = async (req = request, res = response) => {
 		};
 
 		const teamFormated = {
-			members,
+			members: populatedMembers.map((member) => ({
+				_id: member._id,
+				name: member.name,
+				email: member.email,
+			})),
 			owner,
 			name: team.name,
 			id: team._id,
@@ -89,6 +107,7 @@ export const createTeam = async (req = request, res = response) => {
 			team: teamFormated,
 		});
 	} catch (error) {
+		console.error('createTeam error:', error);
 		res.status(500).json({
 			ok: false,
 			message: 'Por favor hable con el administrador',
