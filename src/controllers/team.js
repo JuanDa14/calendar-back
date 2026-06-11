@@ -272,6 +272,192 @@ export const deleteMember = async (req = request, res = response) => {
 	}
 };
 
+export const searchTeams = async (req = request, res = response) => {
+	const { query } = req.body;
+
+	try {
+		const trimmed = query?.trim();
+
+		if (!trimmed || trimmed.length < 2) {
+			return res.status(200).json({ ok: true, equipos: [] });
+		}
+
+		const usuario = await Usuario.findById(req.uid).select('team').lean();
+
+		if (usuario?.team) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya perteneces a un equipo',
+			});
+		}
+
+		const ownedTeam = await Team.findOne({ owner: req.uid }).select('_id').lean();
+
+		if (ownedTeam) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya eres propietario de un equipo',
+			});
+		}
+
+		const regex = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+		const equipos = await Team.find({ name: regex })
+			.select('name description members owner')
+			.populate('owner', 'name')
+			.limit(8)
+			.lean();
+
+		res.status(200).json({
+			ok: true,
+			equipos: equipos.map((equipo) => ({
+				_id: equipo._id,
+				name: equipo.name,
+				description: equipo.description || '',
+				membersCount: equipo.members?.length || 0,
+				owner: equipo.owner?.name || '—',
+			})),
+		});
+	} catch (error) {
+		console.error('searchTeams error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const joinTeam = async (req = request, res = response) => {
+	const { uid } = req;
+	const { id } = req.params;
+
+	try {
+		const usuario = await Usuario.findById(uid).select('team name').lean();
+
+		if (!usuario) {
+			return res.status(404).json({ ok: false, message: 'Usuario no encontrado' });
+		}
+
+		if (usuario.team) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya perteneces a un equipo',
+			});
+		}
+
+		const ownedTeam = await Team.findOne({ owner: uid }).select('_id').lean();
+
+		if (ownedTeam) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya eres propietario de un equipo',
+			});
+		}
+
+		const team = await Team.findById(id).select('name description members owner events');
+
+		if (!team) {
+			return res.status(404).json({ ok: false, message: 'Equipo no encontrado' });
+		}
+
+		if (team.owner.toString() === uid.toString()) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya eres el propietario de este equipo',
+			});
+		}
+
+		if (team.members.some((memberId) => memberId.toString() === uid.toString())) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya eres miembro de este equipo',
+			});
+		}
+
+		const userEvents = await Evento.find({ user: uid }).select('_id').lean();
+
+		team.members.push(uid);
+
+		for (const event of userEvents) {
+			const exists = team.events.some((eventId) => eventId.toString() === event._id.toString());
+			if (!exists) team.events.push(event._id);
+		}
+
+		await team.save();
+		await Usuario.findByIdAndUpdate(uid, { team: team._id });
+
+		const owner = await Usuario.findById(team.owner).select('name').lean();
+		const populatedMembers = await Usuario.find({ _id: { $in: team.members } })
+			.select('name email avatar')
+			.lean();
+
+		res.status(200).json({
+			ok: true,
+			message: `Te uniste al equipo ${team.name}`,
+			team: {
+				id: team._id,
+				name: team.name,
+				description: team.description || '',
+				owner: { _id: team.owner, name: owner?.name },
+				members: populatedMembers.map((member) => ({
+					_id: member._id,
+					name: member.name,
+					email: member.email,
+					avatar: member.avatar || null,
+				})),
+			},
+		});
+	} catch (error) {
+		console.error('joinTeam error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
+export const leaveTeam = async (req = request, res = response) => {
+	const { uid } = req;
+
+	try {
+		const team = await Team.findOne({ members: uid }).select('name owner members events');
+
+		if (!team) {
+			return res.status(400).json({
+				ok: false,
+				message: 'No perteneces a ningún equipo como miembro',
+			});
+		}
+
+		if (team.owner.toString() === uid.toString()) {
+			return res.status(400).json({
+				ok: false,
+				message: 'El propietario no puede abandonar el equipo. Elimínalo desde configuración.',
+			});
+		}
+
+		const userEvents = await Evento.find({ user: uid }).select('_id').lean();
+		const userEventIds = new Set(userEvents.map((event) => event._id.toString()));
+
+		team.members = team.members.filter((memberId) => memberId.toString() !== uid.toString());
+		team.events = team.events.filter((eventId) => !userEventIds.has(eventId.toString()));
+
+		await team.save();
+		await Usuario.findByIdAndUpdate(uid, { team: null });
+
+		res.status(200).json({
+			ok: true,
+			message: `Has abandonado el equipo ${team.name}`,
+		});
+	} catch (error) {
+		console.error('leaveTeam error:', error);
+		res.status(500).json({
+			ok: false,
+			message: 'Por favor hable con el administrador',
+		});
+	}
+};
+
 export const searchMember = async (req = request, res = response) => {
 	const { query } = req.body;
 

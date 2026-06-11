@@ -7,7 +7,10 @@ import {
 	deleteMember,
 	deleteTeam,
 	getEventsTeam,
+	joinTeam,
+	leaveTeam,
 	searchMember,
+	searchTeams,
 	updateTeam,
 } from '../controllers/index.js';
 
@@ -39,6 +42,23 @@ router.post(
 	],
 	searchMember
 );
+
+router.post(
+	'/search/team',
+	[
+		check('query', 'La búsqueda debe tener al menos 2 caracteres')
+			.notEmpty()
+			.isString()
+			.trim()
+			.isLength({ min: 2 }),
+		validarCampos,
+	],
+	searchTeams
+);
+
+router.post('/join/:id', [check('id').notEmpty().isMongoId(), validarCampos], joinTeam);
+
+router.post('/leave', leaveTeam);
 
 router.post(
 	'/',
