@@ -28,6 +28,19 @@ router.use(verifyToken);
 router.get('/', getEventsTeam);
 
 router.post(
+	'/search/member',
+	[
+		check('query', 'La búsqueda debe tener al menos 2 caracteres')
+			.notEmpty()
+			.isString()
+			.trim()
+			.isLength({ min: 2 }),
+		validarCampos,
+	],
+	searchMember
+);
+
+router.post(
 	'/',
 	[
 		check('name', 'El nombre del equipo es obligatorio').notEmpty().isString().trim(),
@@ -48,19 +61,6 @@ router.post(
 		validarCampos,
 	],
 	addMember
-);
-
-router.post(
-	'/search/member',
-	[
-		check('query', 'La búsqueda debe tener al menos 2 caracteres')
-			.notEmpty()
-			.isString()
-			.trim()
-			.isLength({ min: 2 }),
-		validarCampos,
-	],
-	searchMember
 );
 
 router.post(

@@ -79,6 +79,10 @@ export const UsuarioEstaVerificado = async (token) => {
 export const UsuarioTieneUnTeam = async (__, { req }) => {
 	const usuario = await Usuario.findById(req.uid).select('team').lean();
 
+	if (!usuario) {
+		throw new Error('Usuario no encontrado');
+	}
+
 	if (usuario.team) {
 		throw new Error(`Ya perteneces a un equipo`);
 	}

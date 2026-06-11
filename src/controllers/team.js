@@ -1,6 +1,20 @@
 import { request, response } from 'express';
+import mongoose from 'mongoose';
 import { formatMember } from '../helpers/index.js';
 import { Evento, Team, Usuario } from '../models/index.js';
+
+const getErrorMessage = (error) => {
+	if (error?.code === 11000) {
+		return 'Ya existe un equipo con ese nombre';
+	}
+	if (error?.name === 'ValidationError') {
+		return Object.values(error.errors)[0]?.message || 'Datos del equipo no válidos';
+	}
+	if (error?.name === 'CastError') {
+		return 'Uno de los identificadores enviados no es válido';
+	}
+	return 'Por favor hable con el administrador';
+};
 
 export const getEventsTeam = async (req = request, res = response) => {
 	const { uid } = req;
@@ -15,8 +29,15 @@ export const getEventsTeam = async (req = request, res = response) => {
 			.select('name description')
 			.lean();
 
+		if (!eventosInDB) {
+			return res.status(200).json({
+				ok: false,
+				message: 'No perteneces a ningún equipo',
+			});
+		}
+
 		const eventosFormated = await Promise.all(
-			eventosInDB.events.map(async (evento) => {
+			(eventosInDB.events || []).map(async (evento) => {
 				const usuario = await Usuario.findById(evento.user).select('name').lean();
 				evento.userId = evento.user.toString();
 				evento.user = usuario.name;
@@ -43,10 +64,11 @@ export const getEventsTeam = async (req = request, res = response) => {
 
 export const createTeam = async (req = request, res = response) => {
 	const { uid } = req;
-	const { members = [], name, description } = req.body;
+	const { members = [], name, description = '' } = req.body;
+	let createdTeamId = null;
 
 	try {
-		const usuario = await Usuario.findById(uid);
+		const usuario = await Usuario.findById(uid).select('name team').lean();
 
 		if (!usuario) {
 			return res.status(404).json({
@@ -55,40 +77,68 @@ export const createTeam = async (req = request, res = response) => {
 			});
 		}
 
-		const memberIds = members
-			.map((member) => member._id || member.id)
-			.filter(Boolean);
+		if (usuario.team) {
+			return res.status(400).json({
+				ok: false,
+				message: 'Ya perteneces a un equipo',
+			});
+		}
+
+		const memberIds = [
+			...new Set(
+				members
+					.map((member) => member?._id || member?.id)
+					.filter((id) => id && id.toString() !== uid.toString())
+			),
+		];
+
+		for (const memberId of memberIds) {
+			if (!mongoose.Types.ObjectId.isValid(memberId)) {
+				return res.status(400).json({
+					ok: false,
+					message: 'Uno de los miembros tiene un ID no válido',
+				});
+			}
+
+			const member = await Usuario.findById(memberId).select('team name email').lean();
+
+			if (!member) {
+				return res.status(400).json({
+					ok: false,
+					message: 'Uno de los miembros seleccionados no existe',
+				});
+			}
+
+			if (member.team) {
+				return res.status(400).json({
+					ok: false,
+					message: `${member.name || member.email} ya pertenece a un equipo`,
+				});
+			}
+		}
 
 		const userEvents = await Evento.find({ user: uid }).select('_id').lean();
 		const eventIds = userEvents.map((event) => event._id);
 
 		const team = await Team.create({
 			owner: uid,
-			name,
-			description,
+			name: name.trim(),
+			description: description?.trim() || '',
 			members: memberIds,
 			events: eventIds,
 		});
 
-		usuario.team = team._id;
-		await usuario.save();
+		createdTeamId = team._id;
+
+		await Usuario.findByIdAndUpdate(uid, { team: team._id });
 
 		if (memberIds.length > 0) {
-			await Promise.all(
-				memberIds.map((memberId) =>
-					Usuario.findByIdAndUpdate(memberId, { team: team._id })
-				)
-			);
+			await Usuario.updateMany({ _id: { $in: memberIds } }, { team: team._id });
 		}
 
 		const populatedMembers = await Usuario.find({ _id: { $in: memberIds } })
 			.select('name email')
 			.lean();
-
-		const owner = {
-			_id: usuario._id,
-			name: usuario.name,
-		};
 
 		const teamFormated = {
 			members: populatedMembers.map((member) => ({
@@ -96,7 +146,10 @@ export const createTeam = async (req = request, res = response) => {
 				name: member.name,
 				email: member.email,
 			})),
-			owner,
+			owner: {
+				_id: usuario._id,
+				name: usuario.name,
+			},
 			name: team.name,
 			id: team._id,
 			description: team.description,
@@ -108,9 +161,16 @@ export const createTeam = async (req = request, res = response) => {
 		});
 	} catch (error) {
 		console.error('createTeam error:', error);
-		res.status(500).json({
+
+		if (createdTeamId) {
+			await Team.findByIdAndDelete(createdTeamId).catch(() => null);
+		}
+
+		const status = error?.code === 11000 || error?.name === 'ValidationError' ? 400 : 500;
+
+		res.status(status).json({
 			ok: false,
-			message: 'Por favor hable con el administrador',
+			message: getErrorMessage(error),
 		});
 	}
 };
